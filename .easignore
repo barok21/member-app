@@ -1,0 +1,17 @@
+# Ignore everything else in the project root
+../app/
+../components/
+../lib/
+../public/
+../styles/
+../node_modules/
+
+# Ignore other apps
+../mobile/
+
+# Standard Expo ignores
+node_modules/
+.expo/
+android/
+ios/
+dist/

@@ -1,0 +1,58 @@
+{
+  "expo": {
+    "name": "Merahe",
+    "slug": "member-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "scheme": "member-app",
+    "splash": {
+      "image": "./assets/logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#00387B"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.berry333.member",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "We use Face ID to quickly and securely log you into your Member Account."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#00387B"
+      },
+      "package": "com.berry333.member",
+      "permissions": [
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Allow Merahe Tsidk to log you in using Face ID."
+        }
+      ],
+      "expo-secure-store",
+      "expo-font"
+    ],
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "10e04572-55e4-4e1f-8737-8ecccb5f7279"
+      }
+    },
+    "owner": "berry212"
+  }
+}
