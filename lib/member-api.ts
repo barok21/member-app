@@ -177,7 +177,6 @@ export const memberApi = {
         payment_for_year: data.payment_for_year,
         reference_number: data.reference_number,
         type: 'membership',
-        status: 'completed',
         payment_date: new Date().toISOString(),
       });
     if (payError) throw payError;
