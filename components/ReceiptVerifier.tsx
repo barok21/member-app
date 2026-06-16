@@ -13,8 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from './ThemedText';
 import { useTheme } from '../context/ThemeContext';
 import { useAlert } from '../context/AlertContext';
-import { verifyReceipt, ExtractedReceipt } from '../lib/receipt-verifier';
-import { memberApi } from '../lib/member-api';
+import { applyPayment, ExtractedReceipt, MatchedMonth } from '../lib/receipt-verifier';
 import { getEthiopianMonthName } from '../lib/ethiopian-date';
 
 const BANKS = [
@@ -26,14 +25,7 @@ const BANKS = [
   { id: 'tele', label: 'Telebirr', icon: 'phone-portrait' as const },
 ];
 
-type Step = 'input' | 'verifying' | 'result' | 'applying';
-
-type MatchedMonth = {
-  month: number;
-  year: number;
-  enrollmentId: string;
-  amount: number;
-};
+type Step = 'input' | 'loading' | 'success' | 'error';
 
 interface ReceiptVerifierProps {
   visible: boolean;
@@ -52,7 +44,7 @@ export function ReceiptVerifier({ visible, onClose, memberId, memberName, enroll
   const [url, setUrl] = useState('');
   const [receipt, setReceipt] = useState<ExtractedReceipt | null>(null);
   const [matchedMonths, setMatchedMonths] = useState<MatchedMonth[]>([]);
-  const [error, setError] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
   const reset = () => {
     setStep('input');
@@ -60,7 +52,7 @@ export function ReceiptVerifier({ visible, onClose, memberId, memberName, enroll
     setUrl('');
     setReceipt(null);
     setMatchedMonths([]);
-    setError('');
+    setErrorMessage('');
   };
 
   const handleClose = () => {
@@ -68,7 +60,7 @@ export function ReceiptVerifier({ visible, onClose, memberId, memberName, enroll
     onClose();
   };
 
-  const handleVerify = async () => {
+  const handleVerifyAndPay = async () => {
     if (!bank) {
       showAlert('Error', 'Please select a bank.', 'error');
       return;
@@ -78,81 +70,17 @@ export function ReceiptVerifier({ visible, onClose, memberId, memberName, enroll
       return;
     }
 
-    setStep('verifying');
-    setError('');
+    setStep('loading');
+    setErrorMessage('');
 
     try {
-      const result = await verifyReceipt(bank, url);
-      setReceipt(result.data);
-
-      const activeEnrollments = enrollments.filter((e: any) => e.status === 'active');
-      if (activeEnrollments.length === 0) {
-        setStep('result');
-        setMatchedMonths([]);
-        return;
-      }
-
-      const amount = result.data.amount || 0;
-      const matched: MatchedMonth[] = [];
-
-      for (const env of activeEnrollments) {
-        const fee = env.monthly_fee || 0;
-        if (fee <= 0) continue;
-
-        const unpaid = env.unpaid_months_details || [];
-        let remaining = amount;
-
-        for (const um of unpaid) {
-          if (remaining >= fee) {
-            matched.push({
-              month: um.month,
-              year: um.year,
-              enrollmentId: env.enrollment_id,
-              amount: fee,
-            });
-            remaining -= fee;
-          } else {
-            break;
-          }
-        }
-      }
-
-      setMatchedMonths(matched);
-      setStep('result');
+      const result = await applyPayment(memberId, bank, url);
+      setReceipt(result.receipt);
+      setMatchedMonths(result.matched_months);
+      setStep('success');
     } catch (e: any) {
-      setError(e.message || 'Verification failed');
-      setStep('input');
-      showAlert('Verification Failed', e.message || 'Could not verify this receipt.', 'error');
-    }
-  };
-
-  const handleApply = async () => {
-    if (matchedMonths.length === 0) {
-      showAlert('No Months', 'The receipt amount does not cover any unpaid months.', 'error');
-      return;
-    }
-
-    setStep('applying');
-    try {
-      for (const m of matchedMonths) {
-        await memberApi.submitVerifiedPayment({
-          member_id: memberId,
-          enrollment_id: m.enrollmentId,
-          amount: m.amount,
-          payment_for_month: m.month,
-          payment_for_year: m.year,
-          reference_number: receipt?.reference || url,
-          receipt_data: receipt,
-          receipt_url: url,
-        });
-      }
-
-      showAlert('Payment Applied!', `${matchedMonths.length} month(s) have been paid automatically.`, 'success');
-      reset();
-      onSuccess();
-    } catch (e: any) {
-      showAlert('Error', 'Failed to apply payment: ' + (e.message || 'unknown error'), 'error');
-      setStep('result');
+      setErrorMessage(e.message || 'Payment application failed');
+      setStep('error');
     }
   };
 
@@ -165,9 +93,9 @@ export function ReceiptVerifier({ visible, onClose, memberId, memberName, enroll
 
           {step === 'input' && (
             <ScrollView showsVerticalScrollIndicator={false}>
-              <ThemedText type="subtitle" style={{ marginBottom: 4 }}>Verify Receipt</ThemedText>
+              <ThemedText type="subtitle" style={{ marginBottom: 4 }}>Auto-Pay with Receipt</ThemedText>
               <ThemedText type="caption" style={{ marginBottom: 24, color: theme.textMuted }}>
-                Paste a bank receipt URL to auto-pay your membership.
+                Paste a bank receipt URL to auto-pay your membership. Payment is applied immediately.
               </ThemedText>
 
               <ThemedText type="caption" style={styles.label}>Select Bank</ThemedText>
@@ -217,34 +145,27 @@ export function ReceiptVerifier({ visible, onClose, memberId, memberName, enroll
               </View>
 
               <TouchableOpacity
-                onPress={handleVerify}
+                onPress={handleVerifyAndPay}
                 style={[styles.primaryButton, { backgroundColor: theme.primary }]}
               >
-                <Ionicons name="scan-outline" size={20} color="white" style={{ marginRight: 8 }} />
-                <ThemedText style={{ color: 'white', fontWeight: '900', fontSize: 16 }}>Verify Receipt</ThemedText>
+                <Ionicons name="checkmark-circle" size={20} color="white" style={{ marginRight: 8 }} />
+                <ThemedText style={{ color: 'white', fontWeight: '900', fontSize: 16 }}>Verify & Pay</ThemedText>
               </TouchableOpacity>
             </ScrollView>
           )}
 
-          {step === 'verifying' && (
+          {step === 'loading' && (
             <View style={styles.centerState}>
               <ActivityIndicator size="large" color={theme.primary} />
-              <ThemedText style={{ marginTop: 20, color: theme.textMuted }}>Verifying receipt...</ThemedText>
+              <ThemedText style={{ marginTop: 20, color: theme.textMuted }}>Verifying and applying payment...</ThemedText>
             </View>
           )}
 
-          {step === 'applying' && (
-            <View style={styles.centerState}>
-              <ActivityIndicator size="large" color={theme.primary} />
-              <ThemedText style={{ marginTop: 20, color: theme.textMuted }}>Applying payment...</ThemedText>
-            </View>
-          )}
-
-          {step === 'result' && receipt && (
+          {step === 'success' && receipt && (
             <ScrollView showsVerticalScrollIndicator={false}>
-              <ThemedText type="subtitle" style={{ marginBottom: 4 }}>Receipt Verified ✓</ThemedText>
+              <ThemedText type="subtitle" style={{ marginBottom: 4 }}>Payment Applied ✓</ThemedText>
               <ThemedText type="caption" style={{ marginBottom: 24, color: theme.primary }}>
-                Payment confirmed by {bank.toUpperCase()}
+                Verified by {bank.toUpperCase()}
               </ThemedText>
 
               <View style={[styles.receiptCard, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
@@ -274,7 +195,7 @@ export function ReceiptVerifier({ visible, onClose, memberId, memberName, enroll
 
               {matchedMonths.length > 0 && (
                 <View style={[styles.matchCard, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
-                  <ThemedText type="caption" style={{ marginBottom: 12 }}>Auto-Matched Months</ThemedText>
+                  <ThemedText type="caption" style={{ marginBottom: 12 }}>Months Covered</ThemedText>
                   {matchedMonths.map((m, i) => (
                     <View key={i} style={[styles.matchRow, i > 0 && { borderTopWidth: 1, borderTopColor: theme.border }]}>
                       <Ionicons name="checkmark-circle" size={18} color={theme.success} />
@@ -295,36 +216,28 @@ export function ReceiptVerifier({ visible, onClose, memberId, memberName, enroll
                 </View>
               )}
 
-              {matchedMonths.length === 0 && (
-                <View style={[styles.matchCard, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
-                  <Ionicons name="alert-circle-outline" size={24} color={theme.error} style={{ marginBottom: 8 }} />
-                  <ThemedText style={{ color: theme.textMuted, textAlign: 'center' }}>
-                    The receipt amount ({receipt.amount} ETB) doesn't match any unpaid months. You can still submit it for manual review.
-                  </ThemedText>
-                </View>
-              )}
-
-              <View style={styles.buttonRow}>
-                <TouchableOpacity
-                  onPress={handleClose}
-                  style={[styles.secondaryButton, { borderColor: theme.border }]}
-                >
-                  <ThemedText style={{ fontWeight: '800' }}>Close</ThemedText>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={handleApply}
-                  disabled={matchedMonths.length === 0}
-                  style={[
-                    styles.primaryButton,
-                    { flex: 1.5, backgroundColor: matchedMonths.length > 0 ? theme.primary : theme.border },
-                  ]}
-                >
-                  <Ionicons name="checkmark-circle" size={20} color="white" style={{ marginRight: 8 }} />
-                  <ThemedText style={{ color: 'white', fontWeight: '900' }}>Apply to Account</ThemedText>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                onPress={() => { reset(); onSuccess(); }}
+                style={[styles.primaryButton, { backgroundColor: theme.primary, marginTop: 24 }]}
+              >
+                <ThemedText style={{ color: 'white', fontWeight: '900', fontSize: 16 }}>Done</ThemedText>
+              </TouchableOpacity>
             </ScrollView>
+          )}
+
+          {step === 'error' && (
+            <View style={styles.centerState}>
+              <Ionicons name="alert-circle" size={48} color={theme.error} />
+              <ThemedText style={{ marginTop: 16, textAlign: 'center', color: theme.error }}>
+                {errorMessage}
+              </ThemedText>
+              <TouchableOpacity
+                onPress={() => setStep('input')}
+                style={[styles.primaryButton, { backgroundColor: theme.primary, marginTop: 24, paddingHorizontal: 32 }]}
+              >
+                <ThemedText style={{ color: 'white', fontWeight: '900' }}>Try Again</ThemedText>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
       </View>
@@ -398,14 +311,6 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 16,
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryButton: {
-    flex: 1,
-    height: 56,
-    borderRadius: 16,
-    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
   },

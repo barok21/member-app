@@ -139,51 +139,6 @@ export const memberApi = {
     });
   },
 
-  async submitVerifiedPayment(data: {
-    member_id: string;
-    enrollment_id: string;
-    amount: number;
-    payment_for_month: number;
-    payment_for_year: number;
-    reference_number: string;
-    receipt_data: any;
-    receipt_url: string;
-  }) {
-    const { error: declError } = await supabase
-      .from('payment_declarations')
-      .insert({
-        member_id: data.member_id,
-        enrollment_id: data.enrollment_id,
-        amount: data.amount,
-        payment_method: 'receipt-verified',
-        payment_for_month: data.payment_for_month,
-        payment_for_year: data.payment_for_year,
-        reference_number: data.reference_number,
-        type: 'membership',
-        status: 'approved',
-        receipt_verified: true,
-        receipt_data: data.receipt_data,
-        receipt_url: data.receipt_url,
-      });
-    if (declError) throw declError;
-
-    const { error: payError } = await supabase
-      .from('member_payments')
-      .insert({
-        member_id: data.member_id,
-        enrollment_id: data.enrollment_id,
-        amount: data.amount,
-        payment_for_month: data.payment_for_month,
-        payment_for_year: data.payment_for_year,
-        reference_number: data.reference_number,
-        type: 'membership',
-        payment_date: new Date().toISOString(),
-      });
-    if (payError) throw payError;
-
-    return { success: true };
-  },
-
   async getCategories() {
     const { data, error } = await supabase
       .from('member_categories')
