@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from './ThemedText';
 import { useTheme } from '../context/ThemeContext';
 import { useAlert } from '../context/AlertContext';
-import { applyPayment, ExtractedReceipt, MatchedMonth } from '../lib/receipt-verifier';
+import { verifyReceipt, applyPayment, ExtractedReceipt, MatchedMonth } from '../lib/receipt-verifier';
 import { getEthiopianMonthName } from '../lib/ethiopian-date';
 
 const BANKS = [
@@ -25,7 +25,7 @@ const BANKS = [
   { id: 'tele', label: 'Telebirr', icon: 'phone-portrait' as const },
 ];
 
-type Step = 'input' | 'loading' | 'success' | 'error';
+type Step = 'input' | 'verifying' | 'preview' | 'applying' | 'success' | 'error';
 
 interface ReceiptVerifierProps {
   visible: boolean;
@@ -60,7 +60,7 @@ export function ReceiptVerifier({ visible, onClose, memberId, memberName, enroll
     onClose();
   };
 
-  const handleVerifyAndPay = async () => {
+  const handleVerify = async () => {
     if (!bank) {
       showAlert('Error', 'Please select a bank.', 'error');
       return;
@@ -70,9 +70,21 @@ export function ReceiptVerifier({ visible, onClose, memberId, memberName, enroll
       return;
     }
 
-    setStep('loading');
+    setStep('verifying');
     setErrorMessage('');
 
+    try {
+      const result = await verifyReceipt(bank, url);
+      setReceipt(result.data);
+      setStep('preview');
+    } catch (e: any) {
+      setErrorMessage(e.message || 'Verification failed');
+      setStep('error');
+    }
+  };
+
+  const handleApply = async () => {
+    setStep('applying');
     try {
       const result = await applyPayment(memberId, bank, url);
       setReceipt(result.receipt);
@@ -93,9 +105,9 @@ export function ReceiptVerifier({ visible, onClose, memberId, memberName, enroll
 
           {step === 'input' && (
             <ScrollView showsVerticalScrollIndicator={false}>
-              <ThemedText type="subtitle" style={{ marginBottom: 4 }}>Auto-Pay with Receipt</ThemedText>
+              <ThemedText type="subtitle" style={{ marginBottom: 4 }}>Verify Receipt</ThemedText>
               <ThemedText type="caption" style={{ marginBottom: 24, color: theme.textMuted }}>
-                Paste a bank receipt URL to auto-pay your membership. Payment is applied immediately.
+                Paste a bank receipt URL to auto-pay your membership.
               </ThemedText>
 
               <ThemedText type="caption" style={styles.label}>Select Bank</ThemedText>
@@ -145,19 +157,77 @@ export function ReceiptVerifier({ visible, onClose, memberId, memberName, enroll
               </View>
 
               <TouchableOpacity
-                onPress={handleVerifyAndPay}
+                onPress={handleVerify}
                 style={[styles.primaryButton, { backgroundColor: theme.primary }]}
               >
-                <Ionicons name="checkmark-circle" size={20} color="white" style={{ marginRight: 8 }} />
-                <ThemedText style={{ color: 'white', fontWeight: '900', fontSize: 16 }}>Verify & Pay</ThemedText>
+                <Ionicons name="scan-outline" size={20} color="white" style={{ marginRight: 8 }} />
+                <ThemedText style={{ color: 'white', fontWeight: '900', fontSize: 16 }}>Verify Receipt</ThemedText>
               </TouchableOpacity>
             </ScrollView>
           )}
 
-          {step === 'loading' && (
+          {step === 'verifying' && (
             <View style={styles.centerState}>
               <ActivityIndicator size="large" color={theme.primary} />
-              <ThemedText style={{ marginTop: 20, color: theme.textMuted }}>Verifying and applying payment...</ThemedText>
+              <ThemedText style={{ marginTop: 20, color: theme.textMuted }}>Verifying receipt...</ThemedText>
+            </View>
+          )}
+
+          {step === 'preview' && receipt && (
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <ThemedText type="subtitle" style={{ marginBottom: 4 }}>Receipt Verified ✓</ThemedText>
+              <ThemedText type="caption" style={{ marginBottom: 24, color: theme.primary }}>
+                Payment confirmed by {bank.toUpperCase()}
+              </ThemedText>
+
+              <View style={[styles.receiptCard, { backgroundColor: theme.surfaceElevated, borderColor: theme.border }]}>
+                <View style={styles.receiptRow}>
+                  <ThemedText type="caption">Payer</ThemedText>
+                  <ThemedText type="bold" style={{ fontSize: 14 }}>{receipt.payer_name || '—'}</ThemedText>
+                </View>
+                <View style={[styles.receiptRow, styles.receiptDivider, { borderTopColor: theme.border }]}>
+                  <ThemedText type="caption">Amount</ThemedText>
+                  <ThemedText type="bold" style={{ fontSize: 20, color: theme.success }}>
+                    {receipt.amount?.toLocaleString()} {receipt.currency}
+                  </ThemedText>
+                </View>
+                <View style={[styles.receiptRow, styles.receiptDivider, { borderTopColor: theme.border }]}>
+                  <ThemedText type="caption">Reference</ThemedText>
+                  <ThemedText type="bold" style={{ fontSize: 13 }}>{receipt.reference || '—'}</ThemedText>
+                </View>
+                <View style={[styles.receiptRow, styles.receiptDivider, { borderTopColor: theme.border }]}>
+                  <ThemedText type="caption">Receiver</ThemedText>
+                  <ThemedText type="bold" style={{ fontSize: 14 }}>{receipt.receiver_name || '—'}</ThemedText>
+                </View>
+                <View style={[styles.receiptRow, styles.receiptDivider, { borderTopColor: theme.border }]}>
+                  <ThemedText type="caption">Date</ThemedText>
+                  <ThemedText type="bold" style={{ fontSize: 13 }}>{receipt.date || '—'}</ThemedText>
+                </View>
+              </View>
+
+              <View style={styles.buttonRow}>
+                <TouchableOpacity
+                  onPress={handleClose}
+                  style={[styles.secondaryButton, { borderColor: theme.border }]}
+                >
+                  <ThemedText style={{ fontWeight: '800' }}>Cancel</ThemedText>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={handleApply}
+                  style={[styles.primaryButton, { flex: 1.5, backgroundColor: theme.primary }]}
+                >
+                  <Ionicons name="checkmark-circle" size={20} color="white" style={{ marginRight: 8 }} />
+                  <ThemedText style={{ color: 'white', fontWeight: '900' }}>Apply to Account</ThemedText>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          )}
+
+          {step === 'applying' && (
+            <View style={styles.centerState}>
+              <ActivityIndicator size="large" color={theme.primary} />
+              <ThemedText style={{ marginTop: 20, color: theme.textMuted }}>Applying payment...</ThemedText>
             </View>
           )}
 
@@ -311,6 +381,14 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 16,
     flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  secondaryButton: {
+    flex: 1,
+    height: 56,
+    borderRadius: 16,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
   },

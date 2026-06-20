@@ -1,4 +1,4 @@
-import { RECEIPT_VERIFIER_URL } from '../constants/config';
+import { RECEIPT_VERIFIER_URL, PAYMENT_SERVICE_URL } from '../constants/config';
 
 export type ExtractedReceipt = {
   payer_name: string | null;
@@ -49,7 +49,7 @@ export type ApplyPaymentResult = {
 };
 
 export async function applyPayment(memberId: string, bank: string, receiptUrl: string): Promise<ApplyPaymentResult> {
-  const response = await fetch(`${RECEIPT_VERIFIER_URL}/apply-payment`, {
+  const response = await fetch(`${PAYMENT_SERVICE_URL}/apply-payment`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ member_id: memberId, bank, receipt_url: receiptUrl }),
@@ -57,7 +57,7 @@ export async function applyPayment(memberId: string, bank: string, receiptUrl: s
 
   if (!response.ok) {
     const errorBody = await response.json().catch(() => ({}));
-    throw new Error(errorBody.detail || `Payment application failed (${response.status})`);
+    throw new Error(errorBody.detail || errorBody.error || `Payment application failed (${response.status})`);
   }
 
   return response.json();
