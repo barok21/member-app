@@ -45,7 +45,6 @@ export type ApplyPaymentResult = {
   message: string;
   receipt: ExtractedReceipt | null;
   matched_months: MatchedMonth[];
-  payer_matched: boolean;
 };
 
 export async function applyPayment(memberId: string, bank: string, receiptUrl: string): Promise<ApplyPaymentResult> {
